@@ -5,7 +5,7 @@ EOSIO/Antelope smart contract that creates accounts on incoming token transfer. 
 ## How it works
 
 ```
-User → transfer(EOS/WAX, memo="PUB_K1_...") → Contract
+User → transfer(EOS/WAX, memo="EOS...") → Contract
   → generate name from SHA256(pubkey)
   → newaccount + buyrambytes + delegatebw
   → transfer remainder to new account
@@ -44,7 +44,7 @@ cleos set account permission <account> active --add-code
 cleos push action <contract> setconfig '[1000, 1000, 4096]' -p <contract>@active
 
 # Create account by sending tokens with public key in memo
-cleos transfer user1 <contract> "1.0000 EOS" "PUB_K1_6MRyAjQq8ud7hVNYcfnVPJqcVpscN5So8BhtHuGYqET5GDW5CV"
+cleos transfer user1 <contract> "1.0000 EOS" "EOS6MRyAjQq8ud7hVNYcfnVPJqcVpscN5So8BhtHuGYqET5BoDq63"
 ```
 
 ## Config
