@@ -272,7 +272,7 @@ void memo_acc_creator::delegate_bw(name receiver, asset net, asset cpu) {
         permission_level{get_self(), "active"_n},
         "eosio"_n,
         "delegatebw"_n,
-        std::make_tuple(get_self(), receiver, net, cpu, false)
+        std::make_tuple(get_self(), receiver, net, cpu, true)  // transfer ownership
     ).send();
 }
 
