@@ -1,52 +1,64 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
 ## Project Overview
 
-EOSIO smart contract written in C++ for EOSIO-based blockchains (EOS, WAX, Proton). Compiles to WebAssembly (WASM) for on-chain execution.
+EOSIO smart contract that creates accounts on incoming token transfer. User sends system token with public key in memo — contract creates account with that key.
 
-## Build Commands
-
-```bash
-# Build the contract (from project root)
-cd build && cmake .. && make
-
-# Clean rebuild
-rm -rf build/* && cd build && cmake .. && make
+**Flow:**
+```
+User → transfer(EOS/WAX, memo="PUB_K1_...") → Contract
+  → generate name from SHA256(pubkey)
+  → newaccount + buyrambytes + delegatebw
+  → transfer remainder to new account
 ```
 
-Build outputs in `build/memo_acc_creator/`:
-- `memo_acc_creator.wasm` - WebAssembly binary
-- `memo_acc_creator.abi` - Contract ABI
+## Features
 
-## Deployment & Testing (cleos)
+- **Deterministic naming**: SHA256(pubkey) → 12-char name using `abcdefghijklmnopqrstuvwxyz12345`
+- **Collision handling**: auto-increment salt if name exists
+- **Configurable**: RAM/CPU/NET via singleton config table
+- **Key formats**: supports `PUB_K1_...` and legacy `EOS...`
+
+## Build
 
 ```bash
-# Deploy contract
+cd build && cmake .. && make
+```
+
+Output: `build/memo_acc_creator/memo_acc_creator.wasm`, `.abi`
+
+## Deploy & Use
+
+```bash
+# Deploy
 cleos set contract <account> ./build/memo_acc_creator
 
-# Call action
-cleos push action <contract> hi '{"nm":"alice"}' -p <account>@active
+# Add eosio.code permission (required for inline actions)
+cleos set account permission <account> active --add-code
+
+# Configure (optional, defaults: 0.1 CPU, 0.1 NET, 4096 RAM)
+cleos push action <contract> setconfig '[1000, 1000, 4096]' -p <contract>@active
+
+# Create account
+cleos transfer user1 <contract> "1.0000 EOS" "PUB_K1_6MRyAjQq8ud7hVNYcfnVPJqcVpscN5So8BhtHuGYqET5GDW5CV"
 ```
 
-## Architecture
+## Files
 
 ```
-src/
-├── memo_acc_creator.cpp    # Action implementations
 include/
-├── memo_acc_creator.hpp    # Contract class definition, action declarations
-ricardian/
-├── memo_acc_creator.contracts.md  # Ricardian contract documentation (legal terms)
+├── memo_acc_creator.hpp   # Contract class, config singleton, authority structs
+├── eosio_system.hpp       # getCoreSymbol(), CORE_TOKEN_ACCOUNT
+src/
+├── memo_acc_creator.cpp   # on_transfer handler, name generation, inline actions
 ```
 
-**Contract Pattern:**
-- Header declares `CONTRACT` class extending `eosio::contract`
-- Actions defined with `ACTION` macro
-- Action wrappers created with `action_wrapper` template
-- Implementation in .cpp file
+## Actions & Tables
+
+- `setconfig(cpu_stake, net_stake, ram_bytes)` — admin only, update config
+- `config` table (singleton) — stores RAM/CPU/NET settings
+- `on_notify("eosio.token::transfer")` — catches incoming transfers
 
 ## Dependencies
 
-- EOSIO CDT (Contract Development Toolkit) - fetched automatically via CMake ExternalProject
+- EOSIO CDT (fetched via CMake)
