@@ -5,10 +5,13 @@ EOSIO/Antelope smart contract that creates accounts on incoming token transfer. 
 ## How it works
 
 ```
-User → transfer(EOS/WAX, memo="EOS...") → Contract
+User → transfer(WAX, memo="EOS...") → on_transfer
   → generate name from SHA256(pubkey)
-  → newaccount + buyrambytes + delegatebw
-  → transfer remainder to new account
+  → inline action: process
+    → newaccount + buyrambytes + delegatebw
+    → inline action: finalize
+      → check balance after all purchases
+      → transfer remainder to new account
 ```
 
 ## Features
@@ -17,6 +20,7 @@ User → transfer(EOS/WAX, memo="EOS...") → Contract
 - **Collision handling** — auto-increment salt if name already exists
 - **Configurable** — RAM/CPU/NET amounts via config table
 - **Multi-format keys** — supports `PUB_K1_...` and legacy `EOS...`
+- **Smart remainder** — calculates actual remainder after RAM purchase (not estimated)
 
 ## Build
 

@@ -56,6 +56,10 @@ public:
     // Admin action to update config
     ACTION setconfig(int64_t cpu_stake, int64_t net_stake, uint32_t ram_bytes);
 
+    // Internal actions for processing flow
+    ACTION process(name new_account, eosio::public_key pubkey, asset balance_before);
+    ACTION finalize(name new_account, asset balance_before);
+
     // Transfer notification handler
     [[eosio::on_notify("eosio.token::transfer")]]
     void on_transfer(name from, name to, asset quantity, std::string memo);
@@ -84,4 +88,7 @@ private:
 
     // Inline action: transfer tokens
     void transfer_tokens(name to, asset quantity, std::string memo);
+
+    // Get token balance
+    asset get_balance(name owner, symbol sym);
 };

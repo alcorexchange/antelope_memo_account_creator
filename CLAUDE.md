@@ -6,10 +6,10 @@ EOSIO smart contract that creates accounts on incoming token transfer. User send
 
 **Flow:**
 ```
-User → transfer(EOS/WAX, memo="EOS...") → Contract
+User → transfer(WAX, memo="EOS...") → on_transfer
   → generate name from SHA256(pubkey)
-  → newaccount + buyrambytes + delegatebw
-  → transfer remainder to new account
+  → inline: process → newaccount + buyrambytes + delegatebw
+  → inline: finalize → check balance, transfer remainder
 ```
 
 ## Features
@@ -56,6 +56,8 @@ src/
 ## Actions & Tables
 
 - `setconfig(cpu_stake, net_stake, ram_bytes)` — admin only, update config
+- `process(new_account, pubkey, balance_before)` — internal, creates account
+- `finalize(new_account, balance_before)` — internal, transfers remainder
 - `config` table (singleton) — stores RAM/CPU/NET settings
 - `on_notify("eosio.token::transfer")` — catches incoming transfers
 
