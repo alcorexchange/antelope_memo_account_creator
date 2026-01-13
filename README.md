@@ -21,6 +21,7 @@ User → transfer(WAX, memo="EOS...") → on_transfer
 - **Configurable** — RAM/CPU/NET amounts via config table
 - **Multi-format keys** — supports `PUB_K1_...` and legacy `EOS...`
 - **Smart remainder** — calculates actual remainder after RAM purchase (not estimated)
+- **Full ownership** — CPU/NET transferred to user (not delegated)
 
 ## Build
 
