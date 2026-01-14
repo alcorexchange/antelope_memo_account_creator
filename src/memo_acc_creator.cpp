@@ -58,11 +58,12 @@ void memo_acc_creator::on_transfer(name from, name to, asset quantity, std::stri
         return;
     }
 
-    // Validate token is core system token
-    symbol core_sym = EOSIOSystem::getCoreSymbol();
-    check(quantity.symbol == core_sym, "Only core token accepted");
+    // Validate token from system token contract
+    check(get_first_receiver() == EOSIOSystem::CORE_TOKEN_ACCOUNT, "Only eosio.token accepted");
     check(quantity.is_valid(), "Invalid quantity");
     check(quantity.amount > 0, "Quantity must be positive");
+
+    symbol core_sym = quantity.symbol;  // Use received token symbol
 
     // Validate memo contains public key
     check(memo.length() > 0, "Memo must contain public key");
@@ -83,33 +84,29 @@ void memo_acc_creator::on_transfer(name from, name to, asset quantity, std::stri
     // Parse public key
     eosio::public_key pubkey = parse_pubkey(memo);
 
-    // Find available account name
+    // Find available account name (handles collisions with salt)
     name new_account = find_available_name(memo);
-
-    // Get current balance BEFORE processing (balance already includes received quantity)
-    asset balance_before = get_balance(get_self(), core_sym);
 
     // Call process action inline
     action(
         permission_level{get_self(), "active"_n},
         get_self(),
         "process"_n,
-        std::make_tuple(new_account, pubkey, balance_before)
+        std::make_tuple(new_account, pubkey, core_sym)
     ).send();
 }
 
 // ==================== ACTION: process ====================
 
-ACTION memo_acc_creator::process(name new_account, eosio::public_key pubkey, asset balance_before) {
+ACTION memo_acc_creator::process(name new_account, eosio::public_key pubkey, symbol token_sym) {
     require_auth(get_self());
 
     // Load config
     config_t config_tbl(get_self(), get_self().value);
     config cfg = config_tbl.get_or_default();
 
-    symbol core_sym = EOSIOSystem::getCoreSymbol();
-    asset cpu_stake_asset = asset(cfg.cpu_stake, core_sym);
-    asset net_stake_asset = asset(cfg.net_stake, core_sym);
+    asset cpu_stake_asset = asset(cfg.cpu_stake, token_sym);
+    asset net_stake_asset = asset(cfg.net_stake, token_sym);
 
     // Create account
     create_account(new_account, pubkey);
@@ -117,8 +114,9 @@ ACTION memo_acc_creator::process(name new_account, eosio::public_key pubkey, ass
     // Buy RAM
     buy_ram(new_account, cfg.ram_bytes);
 
-    // Delegate CPU/NET (if configured)
-    if (cfg.cpu_stake > 0 || cfg.net_stake > 0) {
+    // Delegate CPU/NET (if configured and not XPR - Proton has free resources)
+    bool is_xpr = (token_sym.code() == symbol_code("XPR"));
+    if (!is_xpr && (cfg.cpu_stake > 0 || cfg.net_stake > 0)) {
         delegate_bw(new_account, net_stake_asset, cpu_stake_asset);
     }
 
@@ -127,36 +125,27 @@ ACTION memo_acc_creator::process(name new_account, eosio::public_key pubkey, ass
         permission_level{get_self(), "active"_n},
         get_self(),
         "finalize"_n,
-        std::make_tuple(new_account, balance_before)
+        std::make_tuple(new_account, token_sym)
     ).send();
 }
 
 // ==================== ACTION: finalize ====================
 
-ACTION memo_acc_creator::finalize(name new_account, asset balance_before) {
+ACTION memo_acc_creator::finalize(name new_account, symbol token_sym) {
     require_auth(get_self());
 
-    symbol core_sym = EOSIOSystem::getCoreSymbol();
-
     // Get current balance AFTER all purchases
-    asset balance_after = get_balance(get_self(), core_sym);
+    asset balance_after = get_balance(get_self(), token_sym);
 
-    // Calculate remainder (what's left after RAM purchase and staking)
-    asset remainder = balance_after - balance_before;
+    // Transfer remaining balance to new account (keep small buffer)
+    // Buffer: 1 token (handles different precisions)
+    int64_t buffer_amount = 1;
+    for (int i = 0; i < token_sym.precision(); i++) {
+        buffer_amount *= 10;
+    }
 
-    // Transfer remainder to new account if positive
-    // Note: remainder should be negative or zero normally,
-    // but we keep buffer. Only transfer if there's excess.
-    // Actually: balance_before was AFTER receiving, so remainder = current - before_spending
-    // We want to keep some buffer, transfer only excess above initial balance
-
-    // Simpler: just check if balance > some minimum buffer, transfer the rest
-    // Or: transfer (balance_after - small_buffer) to new account
-
-    // For now: if balance_after > 0, transfer most of it keeping small buffer
-    int64_t buffer = 100000000; // 1 WAX buffer (8 decimals)
-    if (balance_after.amount > buffer) {
-        asset to_transfer = balance_after - asset(buffer, core_sym);
+    if (balance_after.amount > buffer_amount) {
+        asset to_transfer = balance_after - asset(buffer_amount, token_sym);
         if (to_transfer.amount > 0) {
             transfer_tokens(new_account, to_transfer, "Account created");
         }
